@@ -1,203 +1,14 @@
-from __future__ import annotations
-import uuid
-import datetime
-import getpass
-import json
-import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
+from data.DataStore import ( User, Bank, Account, Deposit, 
+                  Transaction, Enterprise, LogEntry, 
+                  DataStore, gen_id)
 
-# Utilities / Validation
-def gen_id(prefix: str = "") -> str:
-    return prefix + str(uuid.uuid4())[:8]
-
-def now_iso() -> str:
-    return datetime.datetime.utcnow().isoformat()
-
-def input_nonempty(prompt: str) -> str:
-    while True:
-        s = input(prompt).strip()
-        if s:
-            return s
-        print("Поле не может быть пустым. Повторите ввод.")
-
-def input_positive_float(prompt: str) -> float:
-    while True:
-        s = input(prompt).replace(",", ".").strip()
-        try:
-            v = float(s)
-            if v > 0:
-                return v
-            print("Введите число > 0.")
-        except:
-            print("Невалидный ввод. Введите число.")
-
-# Domain models
-class LogEntry:
-    def __init__(self, actor_id: str, action: str, payload: dict, timestamp: Optional[str] = None):
-        self.id = gen_id("log_")
-        self.actor_id = actor_id
-        self.action = action
-        self.payload = payload
-        self.timestamp = timestamp or now_iso()
-
-    def to_dict(self):
-        return {"id": self.id, "actor_id": self.actor_id, "action": self.action, "payload": self.payload, "timestamp": self.timestamp}
-
-class Transaction:
-    def __init__(self, src_type: str, src_id: str, dst_type: str, 
-                 dst_id: str, amount: float, actor_id: str):
-        self.id = gen_id("tx_")
-        self.src_type = src_type  
-        self.src_id = src_id
-        self.dst_type = dst_type
-        self.dst_id = dst_id
-        self.amount = amount
-        self.timestamp = now_iso()
-        self.actor_id = actor_id
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "src_type": self.src_type,
-            "src_id": self.src_id,
-            "dst_type": self.dst_type,
-            "dst_id": self.dst_id,
-            "amount": self.amount,
-            "timestamp": self.timestamp,
-            "actor_id": self.actor_id,
-        }
-
-class Account:
-    def __init__(self, bank_id: str, owner_id: str, 
-                 balance: float = 0.0, blocked: bool = False):
-        self.id = gen_id("acc_")
-        self.bank_id = bank_id
-        self.owner_id = owner_id
-        self.balance = float(balance)
-        self.blocked = blocked
-        self.history: List[Transaction] = []
-
-    def deposit(self, amount: float, tx: Transaction):
-        if self.blocked:
-            raise ValueError("Счет заблокирован.")
-        if amount <= 0:
-            raise ValueError("Сумма должна быть > 0.")
-        self.balance += amount
-        self.history.append(tx)
-
-    def withdraw(self, amount: float, tx: Transaction):
-        if self.blocked:
-            raise ValueError("Счет заблокирован.")
-        if amount <= 0:
-            raise ValueError("Сумма должна быть > 0.")
-        if self.balance < amount:
-            raise ValueError("Недостаточно средств.")
-        self.balance -= amount
-        self.history.append(tx)
-
-    def to_dict(self):
-        return {"id": self.id, "bank_id": self.bank_id, 
-                "owner_id": self.owner_id, "balance": self.balance, 
-                "blocked": self.blocked}
-
-class Deposit:
-    def __init__(self, bank_id: str, owner_id: str, principal: float, 
-                 rate_pct: float, term_months: int, blocked: bool = False):
-        self.id = gen_id("dep_")
-        self.bank_id = bank_id
-        self.owner_id = owner_id
-        self.principal = float(principal)
-        self.rate_pct = float(rate_pct)
-        self.term_months = int(term_months)
-        self.blocked = blocked
-        self.created_at = now_iso()
-        self.history: List[Transaction] = []
-
-    def accrue_month(self):
-        # простая месячная капитализация
-        monthly_rate = self.rate_pct / 100.0 / 12.0
-        self.principal += self.principal * monthly_rate
-
-    def to_dict(self):
-        return {"id": self.id, "bank_id": self.bank_id,
-                "owner_id": self.owner_id, "principal": self.principal, 
-                "rate_pct": self.rate_pct, "term_months": self.term_months, "blocked": self.blocked}
-
-class Bank:
-    def __init__(self, name: str):
-        self.id = gen_id("bank_")
-        self.name = name
-        self.accounts: Dict[str, Account] = {}
-        self.deposits: Dict[str, Deposit] = {}
-
-    def to_dict(self):
-        return {"id": self.id, "name": self.name}
-
-class Enterprise:
-    def __init__(self, name: str, manager_id: Optional[str] = None, funds: float = 0.0):
-        self.id = gen_id("ent_")
-        self.name = name
-        self.manager_id = manager_id 
-        self.employees: List[str] = [] 
-        self.funds = float(funds)
-        self.payroll_requests: Dict[str, Dict[str, Any]] = {}  
-    def to_dict(self):
-        return {"id": self.id, "name": self.name, "funds": self.funds}
-
-class User:
-    def __init__(self, login: str, full_name: str, role: str, password: str):
-        self.id = gen_id("usr_")
-        self.login = login
-        self.full_name = full_name
-        self.role = role 
-        self.password = password
-        self.confirmed = role != "client"  
-
-    def to_dict(self):
-        return {"id": self.id, "login": self.login, "full_name": self.full_name, 
-                "role": self.role, "confirmed": self.confirmed}
-
-# Repositories / Managers (Single Responsibility)
-class DataStore:
-    """Хранит все сущности в памяти (для demo). Можно добавить сериализацию."""
-    def __init__(self):
-        self.users: Dict[str, User] = {}
-        self.banks: Dict[str, Bank] = {}
-        self.enterprises: Dict[str, Enterprise] = {}
-        self.logs: List[LogEntry] = []
-        self.transactions: Dict[str, Transaction] = {}
-
-        self.accounts_index: Dict[str, Account] = {}
-        self.deposits_index: Dict[str, Deposit] = {}
-
-    def save_log(self, entry: LogEntry):
-        self.logs.append(entry)
-
-    def save_tx(self, tx: Transaction):
-        self.transactions[tx.id] = tx
-
-    def dump_to_file(self, path="demo_state.json"):
-        obj = {
-            "users": {u_id: u.to_dict() for u_id, u in self.users.items()},
-            "banks": {b_id: {"meta": bank.to_dict(),
-                             "accounts": {acc.id: acc.to_dict() for acc in bank.accounts.values()},
-                             "deposits": {dep.id: dep.to_dict() for dep in bank.deposits.values()}} 
-                             for b_id, bank in self.banks.items()},
-            "enterprises": {e_id: ent.to_dict() for e_id, ent in self.enterprises.items()},
-            "logs": [l.to_dict() for l in self.logs],
-            "transactions": {tx_id: tx.to_dict() for tx_id, tx in self.transactions.items()}
-        }
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-        print(f"State dumped to {path}")
-
-# Services (Open/Closed, Single Responsibility)
-class AuthService:
+# Services ( Single Responsibility)
+class AutoService:
     def __init__(self, store: DataStore):
         self.store = store
 
     def register_client(self, login: str, full_name: str, password: str) -> User:
-        # validation
         if any(u.login == login for u in self.store.users.values()):
             raise ValueError("Пользователь с таким логином уже существует.")
         if len(password) < 4:
@@ -401,7 +212,6 @@ class EnterpriseService:
         self.store.save_log(LogEntry(actor_id=manager_id, action="remove_employee", 
                                      payload={"enterprise_id": enterprise_id, "client_id": client_id}))
 
-# Admin: view logs and undo
 class AdminService:
     def __init__(self, store: DataStore, bank_service: BankService, tx_service: TransactionService):
         self.store = store
@@ -423,11 +233,11 @@ class AdminService:
                                      payload={"original_tx": tx.to_dict(), "undo_tx": rev.to_dict()}))
         return rev
 
-# Application / CLI (UI)
-class CLIApp:
+# Application / Core
+class CoreApp:
     def __init__(self):
         self.store = DataStore()
-        self.auth = AuthService(self.store)
+        self.auth = AutoService(self.store)
         self.bank_service = BankService(self.store)
         self.enterprise_service = EnterpriseService(self.store)
         self.tx_service = TransactionService(self.store, self.bank_service)
@@ -458,33 +268,33 @@ class CLIApp:
         ent = self.enterprise_service.create_enterprise("ООО Рога и Копыта", manager_id=mgr.id, funds=10000.0)
         self.store.save_log(LogEntry(actor_id="system", action="seeded_demo", 
                                      payload={"banks": [b1.to_dict(), b2.to_dict()], "users": [c1.to_dict(), c2.to_dict()]}))
-
-    def run(self):
-        print("=== Система: Управление финансовой системой (консольная демонстрация) ===")
-        while True:
-            if not self.current_user:
-                print("\n1) Войти\n2) Зарегистрироваться (клиент)\n3) Выход")
-                choice = input("Выберите: ").strip()
-                if choice == "1":
-                    self.menu_login()
-                elif choice == "2":
-                    self.menu_register()
-                elif choice == "3":
-                    print("Выход. До свидания.")
-                    break
-                else:
-                    print("Неправильный выбор.")
-            else:
-                role = self.current_user.role
-                if role == "client":
-                    self.menu_client()
-                elif role == "manager":
-                    self.menu_manager()
-                elif role == "admin":
-                    self.menu_admin()
-                else:
-                    print("Неизвестная роль. Выход.")
-                    break
+(
+    # def run(self):
+    #     print("=== Система: Управление финансовой системой (консольная демонстрация) ===")
+    #     while True:
+    #         if not self.current_user:
+    #             print("\n1) Войти\n2) Зарегистрироваться (клиент)\n3) Выход")
+    #             choice = input("Выберите: ").strip()
+    #             if choice == "1":
+    #                 self.menu_login()
+    #             elif choice == "2":
+    #                 self.menu_register()
+    #             elif choice == "3":
+    #                 print("Выход. До свидания.")
+    #                 break
+    #             else:
+    #                 print("Неправильный выбор.")
+    #         else:
+    #             role = self.current_user.role
+    #             if role == "client":
+    #                 self.menu_client()
+    #             elif role == "manager":
+    #                 self.menu_manager()
+    #             elif role == "admin":
+    #                 self.menu_admin()
+    #             else:
+    #                 print("Неизвестная роль. Выход.")
+    #                 break
 
     # def menu_login(self):
     #     login = input_nonempty("Логин: ")
@@ -863,3 +673,4 @@ class CLIApp:
 # админ:        логин admin, пароль adminpass
 # клиент        (одобрен): логин alice, пароль alice123 (есть счёт и вклад)
 # клиент        (неподтверждён): логин bob, пароль bob123 (нужно подтверждение менеджера)
+)
