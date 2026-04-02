@@ -1,6 +1,9 @@
 # ================== VALIDATION DECORATOR ==================
 def validate_input_num(check_func, error_message):
     def decorator(func):
+
+
+        
         def wrapper():
             while True:
                 try:
