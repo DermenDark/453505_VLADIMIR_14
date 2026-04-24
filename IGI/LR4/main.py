@@ -3,6 +3,7 @@ from Task2 import Menu2
 from Task3 import Menu3
 from Task4 import Menu4
 from Task5 import Menu5
+from Task6 import Menu6
 
 
 class MasterMenu:
@@ -15,6 +16,7 @@ class MasterMenu:
             "3": ("Задание 3", Menu3),
             "4": ("Задание 4", Menu4),
             "5": ("Задание 5", Menu5),
+            "6": ("Задание 6", Menu6),
         }
 
     def show_menu(self):

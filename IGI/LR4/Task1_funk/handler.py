@@ -5,22 +5,30 @@ from pathlib import Path
 from typing import List
 from Task1_funk.item import Tree
 
+
 class TreeRepository(ABC):
+    """Abstract repository interface for tree storage."""
+
     @abstractmethod
     def get_all(self) -> List[Tree]:
+        """Return all stored trees."""
         raise NotImplementedError
 
     @abstractmethod
     def save_all(self, trees: List[Tree]) -> None:
+        """Save full tree list to storage."""
         raise NotImplementedError
 
 
 class CsvTreeRepository(TreeRepository):
+    """CSV-based implementation of TreeRepository."""
+
     def __init__(self, filename: str = "forest.csv"):
         self.filename = Path(filename)
         self._ensure_file()
 
     def _ensure_file(self) -> None:
+        """Create file if it does not exist."""
         self.filename.parent.mkdir(parents=True, exist_ok=True)
         if not self.filename.exists():
             with self.filename.open("w", newline="", encoding="utf-8") as f:
@@ -28,6 +36,7 @@ class CsvTreeRepository(TreeRepository):
                 writer.writeheader()
 
     def get_all(self) -> List[Tree]:
+        """Read all trees from CSV file."""
         self._ensure_file()
         trees: List[Tree] = []
 
@@ -50,6 +59,7 @@ class CsvTreeRepository(TreeRepository):
         return trees
 
     def save_all(self, trees: List[Tree]) -> None:
+        """Overwrite CSV with full tree list."""
         self._ensure_file()
         with self.filename.open("w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=["name", "count_tree", "healthy"])
@@ -63,18 +73,23 @@ class CsvTreeRepository(TreeRepository):
                     }
                 )
 
+
 class PickleTreeRepository(TreeRepository):
+    """Pickle-based implementation of TreeRepository."""
+
     def __init__(self, filename: str = "forest.pkl"):
         self.filename = Path(filename)
         self._ensure_file()
 
     def _ensure_file(self) -> None:
+        """Create pickle file if missing."""
         self.filename.parent.mkdir(parents=True, exist_ok=True)
         if not self.filename.exists():
             with self.filename.open("wb") as f:
                 pickle.dump([], f)
 
     def get_all(self) -> List[Tree]:
+        """Load all trees from pickle file."""
         self._ensure_file()
 
         try:
@@ -89,6 +104,7 @@ class PickleTreeRepository(TreeRepository):
             return []
 
     def save_all(self, trees: List[Tree]) -> None:
+        """Save all trees to pickle file."""
         self._ensure_file()
         with self.filename.open("wb") as f:
             pickle.dump(trees, f)
