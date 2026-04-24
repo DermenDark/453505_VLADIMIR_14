@@ -27,3 +27,68 @@
     порядковые номера;
     вывести слова в алфавитном порядке
 '''
+from __future__ import annotations
+from pathlib import Path
+from Task2_funk.text_repository import TextRepository
+from Task2_funk.text_service import TextService
+
+
+class Menu2:
+    """Provide a console menu for text analysis tasks."""
+
+    def __init__(self):
+        self.input_path = Path("input.txt")
+        self.result_path = Path("result_task2.txt")
+        self.archive_path = Path("result_task2.zip")
+        self.repository = TextRepository(self.input_path, self.result_path)
+        self.service = TextService(self.repository)
+
+    def show_report(self):
+        """Analyze the input text and print the report."""
+        try:
+            _, report, archive_info = self.service.analyze_and_save(self.archive_path)
+        except FileNotFoundError:
+            print("Input file not found. Create input.txt first.")
+            return
+
+        print(report)
+        print("\nArchive info:")
+        for key, value in archive_info.items():
+            print(f"{key}: {value}")
+
+    def show_raw_text(self):
+        """Print the raw source text."""
+        try:
+            print(self.repository.read_text())
+        except FileNotFoundError:
+            print("Input file not found. Create input.txt first.")
+
+    def run(self):
+        """Run the menu loop."""
+        while True:
+            # print("\nCurrent files:")
+            # print(f"Input:  {self.input_path}")
+            # print(f"Result: {self.result_path}")
+            # print(f"Zip:    {self.archive_path}")
+            print(
+                """
+1 - Показать исходник
+2 - Анализировать текст и показать результат
+0 - Выход
+"""
+            )
+            choice = input("Выбор: ").strip()
+
+            if choice == "0":
+                print("Выход.")
+                break
+            elif choice == "1":
+                self.show_raw_text()
+            elif choice == "2":
+                self.show_report()
+            else:
+                print("неправильный ввод.")
+
+if __name__ == "__main__":
+    menu = Menu2()
+    menu.run()
